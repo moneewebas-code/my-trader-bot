@@ -2,47 +2,56 @@ import telebot
 import yfinance as yf
 from flask import Flask
 import threading
+import time
 
-# التوكن الشغال بتاعك
+# 1. التوكن الشغال بتاعك
 API_TOKEN = '8506078405:AAGh3bdfwrqSv7Zsq7o52hdEtbINuRPa4sA'
 bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
-# القاموس الذكي الشامل (عشان يفهم كل طلباتك)
+# 2. القاموس الذكي الشامل
 STOCKS = {
-    "فوري": "FWRY.CA", "طلعت": "TMGH.CA", "طلعت مصطفى": "TMGH.CA",
-    "بالم": "PHDC.CA", "حديد عز": "ESRS.CA", "سي اي بي": "COMI.CA",
-    "دهب": "GC=F", "ذهب": "GC=F", "دولار": "EGPHM=X", "السويدي": "SWDY.CA"
+    "فوري": "FWRY.CA", "طلعت": "TMGH.CA", "بالم": "PHDC.CA",
+    "حديد عز": "ESRS.CA", "سي اي بي": "COMI.CA", "دهب": "GC=F",
+    "ذهب": "GC=F", "دولار": "EGPHM=X"
 }
 
-def analyze_smart(text):
+def get_data_fixed(text):
     try:
         ticker = STOCKS.get(text, text.upper())
-        if ".CA" not in ticker and ticker not in ["GC=F", "EGPHM=X"]: ticker += ".CA"
+        if ".CA" not in ticker and ticker not in ["GC=F", "EGPHM=X"]:
+            ticker += ".CA"
         
-        data = yf.download(ticker, period="30d", progress=False)
-        if data.empty: return f"❌ الكود '{text}' غير مدعوم حالياً."
+        # تحسين سحب البيانات لمنع حظر السيرفر
+        stock = yf.Ticker(ticker)
+        data = stock.history(period="5d") # سحب آخر 5 أيام لضمان وجود بيانات
+        
+        if data.empty:
+            return f"❌ الكود '{text}' مش متاح حالياً، جرب (فوري) أو (طلعت)."
 
-        price = float(data['Close'].iloc[-1])
-        ma = float(data['Close'].mean())
-        # ذكاء اصطناعي بسيط لتحليل الحالة
-        signal = "🟢 شراء / صعود" if price > ma else "🔴 انتظار / هبوط"
+        last_price = data['Close'].iloc[-1]
+        prev_price = data['Close'].iloc[-2]
+        change = ((last_price - prev_price) / prev_price) * 100
+        
+        direction = "📈 صعود" if change > 0 else "📉 هبوط"
         unit = "ج.م" if ".CA" in ticker or "EGPHM" in ticker else "دولار"
 
-        return (f"🤖 **تحليل ذكي لـ: {text}**\n\n"
-                f"💰 السعر: {price:.2f} {unit}\n"
-                f"💡 الحالة: {signal}\n"
-                f"📈 متوسط 30 يوم: {ma:.2f} {unit}")
-    except: return "❌ البورصة مغلقة أو فيه مشكلة في البيانات."
+        return (f"🤖 **تقرير المحلل الذكي لـ: {text}**\n\n"
+                f"💰 السعر الحالي: {last_price:.2f} {unit}\n"
+                f"📊 التغير اليومي: {change:.2f}% {direction}\n"
+                f"💡 الحالة: البوت يعمل بنجاح ✅")
+    except Exception as e:
+        return "⚠️ البيانات مش واصلة حالياً، جرب كمان دقيقة."
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
     txt = m.text.strip().lower()
-    bot.reply_to(m, analyze_smart(txt))
+    bot.reply_to(m, f"🔍 جاري سحب بيانات {txt}...")
+    bot.reply_to(m, get_data_fixed(txt))
 
 @app.route('/')
-def health(): return "ONLINE", 200
+def health(): return "STABLE", 200
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000)).start()
-    bot.infinity_polling()
+    bot.infinity_polling(timeout=60, long_polling_timeout=30)
