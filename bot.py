@@ -8,41 +8,41 @@ API_TOKEN = '8506078405:AAGh3bdfwrqSv7Zsq7o52hdEtbINuRPa4sA'
 bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
-# قاموس ذكي للأسهم المصرية
-EGYPT_STOCKS = {
-    "فوري": "FWRY.CA",
-    "طلعت مصطفى": "TMGH.CA",
-    "بالم هيلز": "PHDC.CA",
-    "سي اي بي": "COMI.CA",
-    "هرماس": "HRHO.CA"
+# القاموس الذكي الشامل (عشان يفهم كل طلباتك)
+STOCKS = {
+    "فوري": "FWRY.CA", "طلعت": "TMGH.CA", "طلعت مصطفى": "TMGH.CA",
+    "بالم": "PHDC.CA", "حديد عز": "ESRS.CA", "سي اي بي": "COMI.CA",
+    "دهب": "GC=F", "ذهب": "GC=F", "دولار": "EGPHM=X", "السويدي": "SWDY.CA"
 }
 
-def get_analysis(user_input):
+def analyze_smart(text):
     try:
-        # تحويل العربي لكود إنجليزي لو موجود في القاموس
-        ticker = EGYPT_STOCKS.get(user_input, user_input.upper())
-        if ".CA" not in ticker: ticker += ".CA"
+        ticker = STOCKS.get(text, text.upper())
+        if ".CA" not in ticker and ticker not in ["GC=F", "EGPHM=X"]: ticker += ".CA"
         
-        data = yf.download(ticker, period="1mo", progress=False)
-        if data.empty: return "❌ الكود غير صحيح. ابعت (فوري) أو (TMGH)."
-        
+        data = yf.download(ticker, period="30d", progress=False)
+        if data.empty: return f"❌ الكود '{text}' غير مدعوم حالياً."
+
         price = float(data['Close'].iloc[-1])
         ma = float(data['Close'].mean())
-        signal = "🟢 شراء" if price > ma else "🔴 انتظار"
-        
-        return f"📊 سهم: {user_input}\n💰 السعر الحالي: {price:.2f} ج.م\n💡 التوصية: {signal}"
-    except:
-        return "❌ عذراً، البورصة مغلقة أو الكود خطأ."
+        # ذكاء اصطناعي بسيط لتحليل الحالة
+        signal = "🟢 شراء / صعود" if price > ma else "🔴 انتظار / هبوط"
+        unit = "ج.م" if ".CA" in ticker or "EGPHM" in ticker else "دولار"
+
+        return (f"🤖 **تحليل ذكي لـ: {text}**\n\n"
+                f"💰 السعر: {price:.2f} {unit}\n"
+                f"💡 الحالة: {signal}\n"
+                f"📈 متوسط 30 يوم: {ma:.2f} {unit}")
+    except: return "❌ البورصة مغلقة أو فيه مشكلة في البيانات."
 
 @bot.message_handler(func=lambda m: True)
 def handle(m):
-    text = m.text.strip()
-    bot.reply_to(m, f"🔍 جاري تحليل {text}...")
-    bot.reply_to(m, get_analysis(text))
+    txt = m.text.strip().lower()
+    bot.reply_to(m, analyze_smart(txt))
 
 @app.route('/')
-def health(): return "OK", 200
+def health(): return "ONLINE", 200
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000)).start()
-    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+    bot.infinity_polling()
