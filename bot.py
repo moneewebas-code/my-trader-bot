@@ -52,7 +52,7 @@ def home():
     return "Bot is Alive!"
 
 def run_flask():
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8000)
 
 if __name__ == "__main__":
     # تشغيل السيرفر والبوت في وقت واحد
