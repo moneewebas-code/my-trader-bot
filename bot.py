@@ -5,84 +5,76 @@ from flask import Flask
 import threading
 import os
 
-# 1. إعدادات البوت والتوكن الخاص بك
+# 1. التوكن بتاعك جاهز
 API_TOKEN = '7511116664:AAH_S_2pLly7I6E_6R33D2hIas3m4_Nia8w'
 bot = telebot.TeleBot(API_TOKEN)
-server = Flask(__name__)
+app = Flask(__name__)
 
-# 2. محرك التحليل الذكي (خوارزمية RSI و Moving Averages)
-def analyze_stock_logic(ticker):
+# 2. خوارزمية الذكاء الاصطناعي للتحليل الفني
+def ai_stock_analysis(ticker):
     try:
-        # البحث في البورصة المصرية تلقائياً
         symbol = f"{ticker.upper()}.CA"
+        # سحب بيانات 60 يوم لتحليل أدق
         df = yf.download(symbol, period="60d", interval="1d", progress=False)
         
         if df.empty:
-            return "❌ لم أجد هذا السهم. جرب الأكواد الإنجليزية (مثل: FWRY, TMGH, COMI)."
+            return "❌ الكود غير صحيح. ابعت كود السهم بالإنجليزي (FWRY, TMGH, COMI)."
 
-        # حساب المؤشرات الفنية (الذكاء البرمجي)
-        last_close = float(df['Close'].iloc[-1])
-        ma20 = float(df['Close'].rolling(window=20).mean().iloc[-1])
-        
-        # حساب مؤشر RSI (مؤشر القوة النسبية)
-        delta = df['Close'].diff()
+        # حساب مؤشر القوة النسبية RSI (ذكاء السوق)
+        close = df['Close']
+        delta = close.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs.iloc[-1]))
+        
+        current_price = float(close.iloc[-1])
+        ma20 = float(close.rolling(window=20).mean().iloc[-1])
 
-        # التحليل والقرار
+        # منطق القرار الذكي
         if rsi < 30:
-            status = "🔵 فرصة ذهبية: السهم في منطقة قاع (تشبع بيعي) - احتمالية ارتداد قوية."
+            advice = "🔵 فرصة شراء (السهم في القاع)"
         elif rsi > 70:
-            status = "⚠️ تنبيه: السهم في منطقة قمة (تشبع شرائي) - خطر جني الأرباح."
-        elif last_close > ma20:
-            status = "🟢 اتجاه إيجابي: السعر مستقر فوق المتوسط."
+            advice = "⚠️ خطر (تشبع شرائي - السهم غالي)"
+        elif current_price > ma20:
+            advice = "🟢 إيجابي (صعود مستقر)"
         else:
-            status = "🔴 اتجاه حذر: السعر تحت المتوسط."
+            advice = "🔴 سلبي (انتظر إشارة دخول)"
 
-        return (f"🚀 **التقرير الذكي لسهم: {ticker.upper()}**\n\n"
-                f"💰 السعر الحالي: {last_close:.2f} ج.م\n"
-                f"📈 متوسط 20 يوم: {ma20:.2f}\n"
-                f"📉 مؤشر القوة (RSI): {rsi:.1f}\n"
-                f"💡 التحليل: {status}")
+        return (f"📊 **تحليل ذكي لسهم: {ticker.upper()}**\n\n"
+                f"💰 السعر: {current_price:.2f} ج.م\n"
+                f"📉 مؤشر RSI: {rsi:.1f}\n"
+                f"💡 النصيحة: {advice}")
     except:
-        return "❌ حدث خطأ فني أثناء جلب البيانات. حاول مرة أخرى."
+        return "❌ مشكلة في سحب البيانات."
 
-# 3. خدمات إضافية (تحويل العملات)
-def get_usd_price():
+# 3. ميزة إضافية: سعر الدولار
+def get_usd():
     try:
-        usd_data = yf.download("EGPHM=X", period="1d", progress=False)
-        return float(usd_data['Close'].iloc[-1])
-    except:
-        return None
+        data = yf.download("EGPHM=X", period="1d", progress=False)
+        return float(data['Close'].iloc[-1])
+    except: return None
 
-# 4. أوامر البوت
 @bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "أهلاً يا منير! 🤖 أنا بوتك للذكاء المالي.\n\n"
-                          "🔹 ابعت كود السهم (مثل: FWRY) للتحليل الفني.\n"
-                          "🔹 ابعت كلمة 'دولار' لمعرفة السعر الحالي.")
+def welcome(m):
+    bot.reply_to(m, "أهلاً يا منير! 🤖 أنا بوتك الذكي.\nابعت كود السهم (FWRY) أو كلمة 'دولار'.")
 
-@bot.message_handler(func=lambda m: m.text.lower() in ['دولار', 'سعر الدولار'])
-def usd_handler(message):
-    price = get_usd_price()
-    if price:
-        bot.reply_to(message, f"💵 سعر الدولار الرسمي حالياً: {price:.2f} ج.م")
-    else:
-        bot.reply_to(message, "❌ تعذر جلب سعر العملة حالياً.")
+@bot.message_handler(func=lambda m: m.text.strip() == 'دولار')
+def show_usd(m):
+    price = get_usd()
+    bot.reply_to(m, f"💵 سعر الدولار الرسمي: {price:.2f} ج.م" if price else "❌ تعذر السحب.")
 
 @bot.message_handler(func=lambda m: True)
-def stock_handler(message):
-    ticker = message.text.strip().upper()
-    bot.reply_to(message, f"⚙️ جاري تشغيل خوارزميات التحليل لـ {ticker}...")
-    result = analyze_stock_logic(ticker)
-    bot.reply_to(message, result)
+def handle_msg(m):
+    ticker = m.text.strip().upper()
+    bot.reply_to(m, f"⚙️ ذكاء البوت يحلل {ticker}...")
+    bot.reply_to(m, ai_stock_analysis(ticker))
 
-# 5. إعدادات السيرفر لضمان بقاء البوت Healthy (Port 8000)
-@server.route('/')
-def health(): return "AI Bot is Running", 200
+# 4. حل مشكلة الـ Instance Stopped (البورت 8000)
+@app.route('/')
+def health(): return "I am Alive", 200
 
 if __name__ == "__main__":
-    threading.Thread(target=lambda: server.run(host='0.0.0.0', port=8000)).start()
-    bot.infinity_polling()
+    # تشغيل السيرفر على بورت 8000 عشان Koyeb يفضل Healthy
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8000)).start()
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
